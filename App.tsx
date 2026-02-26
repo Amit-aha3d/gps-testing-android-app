@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { StatusBar, Text } from 'react-native';
+import { PermissionsAndroid, Platform, StatusBar, Text } from 'react-native';
 
 import HomeScreen from './src/screens/HomeScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -21,6 +21,26 @@ const tabIconStyle = (focused: boolean) => ({
 });
 
 export default function App() {
+  useEffect(() => {
+    const requestLocationOnAppOpen = async () => {
+      if (Platform.OS !== 'android') {
+        return;
+      }
+
+      await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        {
+          title: 'Location Permission',
+          message: 'This app needs location permission to show GPS data.',
+          buttonPositive: 'Allow',
+          buttonNegative: 'Deny',
+        },
+      );
+    };
+
+    requestLocationOnAppOpen();
+  }, []);
+
   return (
     <NavigationContainer>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
