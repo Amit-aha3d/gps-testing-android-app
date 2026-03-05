@@ -54,3 +54,12 @@ export async function appendGPSData(point: GPSDataPoint): Promise<GPSDataPoint[]
   await asyncStorage.setItem(GPS_CACHE_KEY, JSON.stringify(next));
   return next;
 }
+
+export async function clearCachedGPSData(): Promise<void> {
+  const asyncStorage = getAsyncStorage();
+  if (!asyncStorage) {
+    return;
+  }
+
+  await asyncStorage.setItem(GPS_CACHE_KEY, JSON.stringify([]));
+}
