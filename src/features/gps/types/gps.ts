@@ -5,12 +5,14 @@ export type GPSDataPoint = {
   accuracy: number | null;
   timestamp: number;
   roadInfo?: GPSRoadInfo | null;
+  querySettings?: GPSQuerySettings | null;
 };
 
 export type GPSRoadInfo = {
   maxSpeed: string;
   tags: Record<string, string>;
   wayId: number | null;
+  status: string;
 };
 
 export type GPSQuerySettings = {

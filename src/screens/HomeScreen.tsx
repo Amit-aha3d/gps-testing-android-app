@@ -78,6 +78,10 @@ export default function HomeScreen() {
             .join(', ')
         : 'not fetched';
 
+    const settingsText = item.querySettings
+      ? `around:${item.querySettings.overpassAroundMeters}m, minAcc:${item.querySettings.minAccuracyMeters}m, distance:${item.querySettings.distanceFilterMeters}m, maxAge:${item.querySettings.maxAgeMs}ms`
+      : 'not saved';
+
     return (
       <View style={styles.row}>
         <Text style={styles.time}>
@@ -95,7 +99,9 @@ export default function HomeScreen() {
           MaxSpeed: {item.roadInfo?.maxSpeed ?? 'not fetched'}
         </Text>
         <Text style={styles.value}>WayId: {item.roadInfo?.wayId ?? 'not fetched'}</Text>
+        <Text style={styles.value}>API Status: {item.roadInfo?.status ?? 'not fetched'}</Text>
         <Text style={styles.value}>Tags: {tagsText}</Text>
+        <Text style={styles.value}>Config: {settingsText}</Text>
       </View>
     );
   };

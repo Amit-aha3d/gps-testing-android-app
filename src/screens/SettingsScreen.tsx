@@ -165,18 +165,28 @@ export default function SettingsScreen() {
 
         <View style={styles.actions}>
           <Pressable
-            style={[styles.button, styles.saveButton]}
+            style={[
+              styles.button,
+              styles.saveButton,
+              isBusy ? styles.buttonDisabled : null,
+            ]}
             onPress={onSavePress}
             disabled={isBusy}
           >
-            <Text style={styles.buttonText}>Save</Text>
+            <Text style={styles.buttonText}>{isBusy ? 'Saving...' : 'Save'}</Text>
           </Pressable>
           <Pressable
-            style={[styles.button, styles.resetButton]}
+            style={[
+              styles.button,
+              styles.resetButton,
+              isBusy ? styles.buttonDisabled : null,
+            ]}
             onPress={onResetPress}
             disabled={isBusy}
           >
-            <Text style={styles.buttonText}>Reset Defaults</Text>
+            <Text style={styles.buttonText}>
+              {isBusy ? 'Please wait...' : 'Reset Defaults'}
+            </Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -230,11 +240,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   actions: {
-    gap: 8,
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
   },
   button: {
+    flex: 1,
     borderRadius: 10,
-    paddingVertical: 12,
+    paddingVertical: 10,
     alignItems: 'center',
   },
   saveButton: {
@@ -248,5 +261,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
   },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
 });
-

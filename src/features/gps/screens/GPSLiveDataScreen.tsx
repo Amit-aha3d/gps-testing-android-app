@@ -143,7 +143,6 @@ export default function GPSLiveDataScreen() {
   const [isPermissionDeniedPermanently, setIsPermissionDeniedPermanently] =
     useState(false);
   const [isRequestingPermission, setIsRequestingPermission] = useState(false);
-  const [latestMaxSpeed, setLatestMaxSpeed] = useState('not fetched');
   const [gpsSettings, setGpsSettings] = useState<GPSQuerySettings>(
     DEFAULT_GPS_QUERY_SETTINGS,
   );
@@ -164,13 +163,24 @@ export default function GPSLiveDataScreen() {
     setGpsSettings(loaded);
   };
 
+  const isSettingsChanged = (
+    a: GPSQuerySettings,
+    b: GPSQuerySettings,
+  ): boolean => {
+    return (
+      a.overpassAroundMeters !== b.overpassAroundMeters ||
+      a.minAccuracyMeters !== b.minAccuracyMeters ||
+      a.distanceFilterMeters !== b.distanceFilterMeters ||
+      a.maxAgeMs !== b.maxAgeMs
+    );
+  };
+
   const cacheSample = async (sample: GPSDataPoint) => {
     const settings = gpsSettingsRef.current;
     const shouldCallOverpass =
       sample.accuracy !== null && sample.accuracy <= settings.minAccuracyMeters;
 
-    let pointToCache = sample;
-    let maxSpeedForWidget = latestMaxSpeed;
+    let pointToCache: GPSDataPoint = sample;
     if (shouldCallOverpass) {
       try {
         const roadInfo = await fetchRoadInfoForLocation(
@@ -178,24 +188,39 @@ export default function GPSLiveDataScreen() {
           sample.longitude,
           settings.overpassAroundMeters,
         );
-        setLatestMaxSpeed(roadInfo.maxSpeed);
-        maxSpeedForWidget = roadInfo.maxSpeed;
         pointToCache = { ...sample, roadInfo };
       } catch {
-        setLatestMaxSpeed('not fetched');
-        maxSpeedForWidget = 'not fetched';
         pointToCache = {
           ...sample,
           roadInfo: {
             maxSpeed: 'not fetched',
             tags: {},
             wayId: null,
+            status: 'Overpass request failed',
           },
         };
       }
+    } else {
+      pointToCache = {
+        ...sample,
+        roadInfo: {
+          maxSpeed: 'not fetched',
+          tags: {},
+          wayId: null,
+          status:
+            sample.accuracy === null
+              ? 'Skipped: accuracy unavailable'
+              : `Skipped: accuracy ${sample.accuracy.toFixed(1)}m above threshold ${settings.minAccuracyMeters}m`,
+        },
+      };
     }
 
-    const resolvedMaxSpeed = pointToCache.roadInfo?.maxSpeed ?? maxSpeedForWidget;
+    pointToCache = {
+      ...pointToCache,
+      querySettings: { ...settings },
+    };
+
+    const resolvedMaxSpeed = pointToCache.roadInfo?.maxSpeed ?? 'not fetched';
     await saveGPSOverlayMetrics({
       accuracy: sample.accuracy,
       maxSpeed: resolvedMaxSpeed,
@@ -337,6 +362,28 @@ export default function GPSLiveDataScreen() {
       requestPermissionAndStartGPS();
     });
 
+    const settingsPoller = setInterval(() => {
+      getGPSQuerySettings()
+        .then(nextSettings => {
+          const prevSettings = gpsSettingsRef.current;
+          if (!isSettingsChanged(prevSettings, nextSettings)) {
+            return;
+          }
+
+          gpsSettingsRef.current = nextSettings;
+          setGpsSettings(nextSettings);
+          addStatusUpdate('Applied latest settings.');
+
+          const geolocation = getGeolocation();
+          if (geolocation && watchIdRef.current !== null) {
+            startLocationWatch(geolocation);
+          }
+        })
+        .catch(() => {
+          // Ignore periodic settings read errors.
+        });
+    }, 2000);
+
     const subscription = AppState.addEventListener('change', nextAppState => {
       const prev = appStateRef.current;
       appStateRef.current = nextAppState;
@@ -368,6 +415,7 @@ export default function GPSLiveDataScreen() {
     });
 
     return () => {
+      clearInterval(settingsPoller);
       subscription.remove();
       clearLocationWatch();
     };

@@ -54,6 +54,10 @@ function buildHTML(points: GPSDataPoint[]) {
               .map(([key, value]) => `${key}:${value}`)
               .join(', ')
           : 'not fetched';
+      const apiStatus = item.roadInfo?.status ?? 'not fetched';
+      const config = item.querySettings
+        ? `around:${item.querySettings.overpassAroundMeters}m, minAcc:${item.querySettings.minAccuracyMeters}m, distance:${item.querySettings.distanceFilterMeters}m, maxAge:${item.querySettings.maxAgeMs}ms`
+        : 'not saved';
 
       return `
         <tr>
@@ -65,7 +69,9 @@ function buildHTML(points: GPSDataPoint[]) {
           <td>${esc(accuracy)}</td>
           <td>${esc(maxSpeed)}</td>
           <td>${esc(wayId)}</td>
+          <td>${esc(apiStatus)}</td>
           <td>${esc(tags)}</td>
+          <td>${esc(config)}</td>
         </tr>
       `;
     })
@@ -100,7 +106,9 @@ function buildHTML(points: GPSDataPoint[]) {
               <th>Accuracy</th>
               <th>MaxSpeed</th>
               <th>WayId</th>
+              <th>API Status</th>
               <th>Tags</th>
+              <th>Config</th>
             </tr>
           </thead>
           <tbody>

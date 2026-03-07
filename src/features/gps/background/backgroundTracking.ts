@@ -117,7 +117,7 @@ export async function startBackgroundGPSTracking() {
       const shouldCallOverpass =
         sample.accuracy !== null && sample.accuracy <= settings.minAccuracyMeters;
 
-      let pointToCache = sample;
+      let pointToCache: GPSDataPoint = sample;
       if (shouldCallOverpass) {
         try {
           const roadInfo = await fetchRoadInfoForLocation(
@@ -133,10 +133,29 @@ export async function startBackgroundGPSTracking() {
               maxSpeed: 'not fetched',
               tags: {},
               wayId: null,
+              status: 'Overpass request failed',
             },
           };
         }
+      } else {
+        pointToCache = {
+          ...sample,
+          roadInfo: {
+            maxSpeed: 'not fetched',
+            tags: {},
+            wayId: null,
+            status:
+              sample.accuracy === null
+                ? 'Skipped: accuracy unavailable'
+                : `Skipped: accuracy ${sample.accuracy.toFixed(1)}m above threshold ${settings.minAccuracyMeters}m`,
+          },
+        };
       }
+
+      pointToCache = {
+        ...pointToCache,
+        querySettings: { ...settings },
+      };
 
       await saveGPSOverlayMetrics({
         accuracy: sample.accuracy,

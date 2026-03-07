@@ -82,14 +82,16 @@ export async function fetchRoadInfoForLocation(
       maxSpeed: 'not fetched',
       tags: {},
       wayId: null,
+      status: 'No nearby highway found',
     };
   }
 
   const tags = way.tags ?? {};
+  const maxSpeed = tags.maxspeed ?? 'not fetched';
   return {
-    maxSpeed: tags.maxspeed ?? 'not fetched',
+    maxSpeed,
     tags,
     wayId: way.id ?? null,
+    status: tags.maxspeed ? 'Fetched' : 'MaxSpeed tag missing in response',
   };
 }
-
