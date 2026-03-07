@@ -16,7 +16,7 @@ function getPDFGenerator(): PDFGeneratorLike | null {
   try {
     const moduleRef = require('react-native-html-to-pdf');
     return (moduleRef.default ?? moduleRef) as PDFGeneratorLike;
-  } catch (_error) {
+  } catch {
     return null;
   }
 }
@@ -43,6 +43,17 @@ function buildHTML(points: GPSDataPoint[]) {
         item.altitude === null ? 'N/A' : `${item.altitude.toFixed(2)} m`;
       const accuracy =
         item.accuracy === null ? 'N/A' : `${item.accuracy.toFixed(2)} m`;
+      const maxSpeed = item.roadInfo?.maxSpeed ?? 'not fetched';
+      const wayId =
+        item.roadInfo?.wayId === null || item.roadInfo?.wayId === undefined
+          ? 'not fetched'
+          : String(item.roadInfo.wayId);
+      const tags =
+        item.roadInfo && Object.keys(item.roadInfo.tags).length > 0
+          ? Object.entries(item.roadInfo.tags)
+              .map(([key, value]) => `${key}:${value}`)
+              .join(', ')
+          : 'not fetched';
 
       return `
         <tr>
@@ -52,6 +63,9 @@ function buildHTML(points: GPSDataPoint[]) {
           <td>${item.longitude.toFixed(6)}</td>
           <td>${esc(altitude)}</td>
           <td>${esc(accuracy)}</td>
+          <td>${esc(maxSpeed)}</td>
+          <td>${esc(wayId)}</td>
+          <td>${esc(tags)}</td>
         </tr>
       `;
     })
@@ -84,6 +98,9 @@ function buildHTML(points: GPSDataPoint[]) {
               <th>Longitude</th>
               <th>Altitude</th>
               <th>Accuracy</th>
+              <th>MaxSpeed</th>
+              <th>WayId</th>
+              <th>Tags</th>
             </tr>
           </thead>
           <tbody>

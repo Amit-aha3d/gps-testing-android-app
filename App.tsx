@@ -6,7 +6,7 @@ import { PermissionsAndroid, Platform, StatusBar, Text } from 'react-native';
 import HomeScreen from './src/screens/HomeScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import GPSLiveDataScreen from './src/features/gps/screens/GPSLiveDataScreen';
-import GPSScreen from './src/screens/GPSScreen';
+import GlobalGPSWidget from './src/features/gps/components/GlobalGPSWidget';
 
 type RootTabParamList = {
   Home: undefined;
@@ -86,6 +86,7 @@ export default function App() {
           }}
         />
       </Tab.Navigator>
+      <GlobalGPSWidget />
     </NavigationContainer>
   );
 }

@@ -1,16 +1,31 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  AppState,
+  AppStateStatus,
   Linking,
   PermissionsAndroid,
   Platform,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { appendGPSData, isStorageReady } from '../storage/gpsCache';
-import type { GPSDataPoint } from '../types/gps';
+import {
+  DEFAULT_GPS_QUERY_SETTINGS,
+  getGPSQuerySettings,
+} from '../storage/gpsSettings';
+import { saveGPSOverlayMetrics } from '../storage/gpsOverlayMetrics';
+import {
+  isBackgroundTrackingAvailable,
+  isBackgroundTrackingRunning,
+  startBackgroundGPSTracking,
+  stopBackgroundGPSTracking,
+} from '../background/backgroundTracking';
+import { fetchRoadInfoForLocation } from '../services/overpass';
+import type { GPSDataPoint, GPSQuerySettings } from '../types/gps';
 
 type GPSPosition = {
   coords: {
@@ -27,6 +42,16 @@ type GPSError = {
 };
 
 type GeolocationLike = {
+  getCurrentPosition: (
+    success: (position: GPSPosition) => void,
+    failure?: (error: GPSError) => void,
+    options?: {
+      enableHighAccuracy?: boolean;
+      timeout?: number;
+      maximumAge?: number;
+      distanceFilter?: number;
+    },
+  ) => void;
   watchPosition: (
     success: (position: GPSPosition) => void,
     failure?: (error: GPSError) => void,
@@ -40,11 +65,23 @@ type GeolocationLike = {
   clearWatch: (watchId: number) => void;
 };
 
+type GPSStage =
+  | 'idle'
+  | 'requesting_permission'
+  | 'quick_fix'
+  | 'refining_accuracy'
+  | 'tracking';
+
+type StatusUpdate = {
+  message: string;
+  time: number;
+};
+
 function getGeolocation(): GeolocationLike | null {
   try {
     const moduleRef = require('@react-native-community/geolocation');
     return (moduleRef.default ?? moduleRef) as GeolocationLike;
-  } catch (_error) {
+  } catch {
     return null;
   }
 }
@@ -73,15 +110,126 @@ async function requestAndroidLocationPermission() {
   );
 }
 
+async function requestAndroidBackgroundLocationPermission() {
+  if (Platform.OS !== 'android') {
+    return PermissionsAndroid.RESULTS.GRANTED;
+  }
+
+  const sdkVersion = Number(Platform.Version);
+  if (sdkVersion < 29) {
+    return PermissionsAndroid.RESULTS.GRANTED;
+  }
+
+  return PermissionsAndroid.request(
+    PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION,
+    {
+      title: 'Background Location Permission',
+      message:
+        'Allow background location so GPS data continues while the app is minimized.',
+      buttonPositive: 'Allow',
+      buttonNegative: 'Deny',
+    },
+  );
+}
+
 export default function GPSLiveDataScreen() {
   const [gpsData, setGpsData] = useState<GPSDataPoint | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [storageMessage, setStorageMessage] = useState<string | null>(null);
+  const [backgroundMessage, setBackgroundMessage] = useState<string | null>(null);
+  const [gpsStage, setGpsStage] = useState<GPSStage>('idle');
+  const [statusUpdates, setStatusUpdates] = useState<StatusUpdate[]>([]);
+  const [isBackgroundRunning, setIsBackgroundRunning] = useState(false);
   const [isPermissionDeniedPermanently, setIsPermissionDeniedPermanently] =
     useState(false);
   const [isRequestingPermission, setIsRequestingPermission] = useState(false);
+  const [latestMaxSpeed, setLatestMaxSpeed] = useState('not fetched');
+  const [gpsSettings, setGpsSettings] = useState<GPSQuerySettings>(
+    DEFAULT_GPS_QUERY_SETTINGS,
+  );
   const watchIdRef = useRef<number | null>(null);
   const lastCachedAtRef = useRef<number>(0);
+  const bestAccuracyRef = useRef<number | null>(null);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const gpsSettingsRef = useRef<GPSQuerySettings>(DEFAULT_GPS_QUERY_SETTINGS);
+
+  const addStatusUpdate = (message: string) => {
+    const next: StatusUpdate = { message, time: Date.now() };
+    setStatusUpdates(prev => [next, ...prev].slice(0, 5));
+  };
+
+  const refreshSettings = async () => {
+    const loaded = await getGPSQuerySettings();
+    gpsSettingsRef.current = loaded;
+    setGpsSettings(loaded);
+  };
+
+  const cacheSample = async (sample: GPSDataPoint) => {
+    const settings = gpsSettingsRef.current;
+    const shouldCallOverpass =
+      sample.accuracy !== null && sample.accuracy <= settings.minAccuracyMeters;
+
+    let pointToCache = sample;
+    let maxSpeedForWidget = latestMaxSpeed;
+    if (shouldCallOverpass) {
+      try {
+        const roadInfo = await fetchRoadInfoForLocation(
+          sample.latitude,
+          sample.longitude,
+          settings.overpassAroundMeters,
+        );
+        setLatestMaxSpeed(roadInfo.maxSpeed);
+        maxSpeedForWidget = roadInfo.maxSpeed;
+        pointToCache = { ...sample, roadInfo };
+      } catch {
+        setLatestMaxSpeed('not fetched');
+        maxSpeedForWidget = 'not fetched';
+        pointToCache = {
+          ...sample,
+          roadInfo: {
+            maxSpeed: 'not fetched',
+            tags: {},
+            wayId: null,
+          },
+        };
+      }
+    }
+
+    const resolvedMaxSpeed = pointToCache.roadInfo?.maxSpeed ?? maxSpeedForWidget;
+    await saveGPSOverlayMetrics({
+      accuracy: sample.accuracy,
+      maxSpeed: resolvedMaxSpeed,
+    });
+    await appendGPSData(pointToCache);
+  };
+
+  const onPositionReceived = (position: GPSPosition) => {
+    setErrorMessage(null);
+    const sample: GPSDataPoint = {
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      altitude: position.coords.altitude,
+      accuracy: position.coords.accuracy,
+      timestamp: position.timestamp,
+    };
+
+    setGpsData(sample);
+    if (sample.accuracy !== null) {
+      const previousBest = bestAccuracyRef.current;
+      if (previousBest === null || sample.accuracy < previousBest) {
+        bestAccuracyRef.current = sample.accuracy;
+        addStatusUpdate(`Accuracy improved: ${sample.accuracy.toFixed(1)} m`);
+      }
+    }
+
+    const now = Date.now();
+    if (now - lastCachedAtRef.current >= 5000) {
+      lastCachedAtRef.current = now;
+      cacheSample(sample).catch(() => {
+        setStorageMessage('Failed to cache GPS sample.');
+      });
+    }
+  };
 
   const clearLocationWatch = () => {
     if (watchIdRef.current === null) {
@@ -95,6 +243,8 @@ export default function GPSLiveDataScreen() {
 
   const startLocationWatch = (geolocation: GeolocationLike) => {
     clearLocationWatch();
+    setGpsStage('refining_accuracy');
+    addStatusUpdate('Started high-accuracy refinement.');
     if (!isStorageReady()) {
       setStorageMessage(
         'Storage module missing. Run: npm i @react-native-async-storage/async-storage',
@@ -105,33 +255,18 @@ export default function GPSLiveDataScreen() {
 
     watchIdRef.current = geolocation.watchPosition(
       (position: GPSPosition) => {
-        setErrorMessage(null);
-        const sample: GPSDataPoint = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          altitude: position.coords.altitude,
-          accuracy: position.coords.accuracy,
-          timestamp: position.timestamp,
-        };
-
-        setGpsData(sample);
-
-        const now = Date.now();
-        if (now - lastCachedAtRef.current >= 5000) {
-          lastCachedAtRef.current = now;
-          appendGPSData(sample).catch(() => {
-            setStorageMessage('Failed to cache GPS sample.');
-          });
-        }
+        onPositionReceived(position);
+        setGpsStage('tracking');
       },
       (error: GPSError) => {
         setErrorMessage(error.message);
+        addStatusUpdate(`GPS error: ${error.message}`);
       },
       {
         enableHighAccuracy: true,
-        distanceFilter: 0,
-        timeout: 15000,
-        maximumAge: 2000,
+        distanceFilter: gpsSettingsRef.current.distanceFilterMeters,
+        timeout: 10000,
+        maximumAge: gpsSettingsRef.current.maxAgeMs,
       },
     );
   };
@@ -142,6 +277,8 @@ export default function GPSLiveDataScreen() {
     }
 
     setIsRequestingPermission(true);
+    setGpsStage('requesting_permission');
+    addStatusUpdate('Requesting location permission...');
 
     const granted = await requestAndroidLocationPermission();
     const hasPermission = granted === PermissionsAndroid.RESULTS.GRANTED;
@@ -152,6 +289,8 @@ export default function GPSLiveDataScreen() {
 
     if (!hasPermission) {
       setErrorMessage('Location permission denied.');
+      setGpsStage('idle');
+      addStatusUpdate('Location permission denied.');
       clearLocationWatch();
       setIsRequestingPermission(false);
       return;
@@ -162,18 +301,74 @@ export default function GPSLiveDataScreen() {
       setErrorMessage(
         'Geolocation module missing. Run: npm i @react-native-community/geolocation',
       );
+      setGpsStage('idle');
+      addStatusUpdate('Geolocation module is missing.');
       setIsRequestingPermission(false);
       return;
     }
 
+    // Fast first fix: allow cached/network location so UI updates quickly.
+    setGpsStage('quick_fix');
+    addStatusUpdate('Getting quick first fix...');
+    geolocation.getCurrentPosition(
+      (position: GPSPosition) => {
+        onPositionReceived(position);
+        addStatusUpdate('Quick fix received.');
+      },
+      () => {
+        // Ignore this failure; high-accuracy watcher below keeps running.
+        addStatusUpdate('Quick fix timed out; continuing with high accuracy.');
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 4000,
+        maximumAge: Math.max(15000, gpsSettingsRef.current.maxAgeMs),
+      },
+    );
+
+    // Then keep watching with high accuracy for better precision.
     startLocationWatch(geolocation);
     setIsRequestingPermission(false);
   };
 
   useEffect(() => {
-    requestPermissionAndStartGPS();
+    setIsBackgroundRunning(isBackgroundTrackingRunning());
+    refreshSettings().finally(() => {
+      requestPermissionAndStartGPS();
+    });
+
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      const prev = appStateRef.current;
+      appStateRef.current = nextAppState;
+
+      const movedToBackground =
+        prev === 'active' && (nextAppState === 'background' || nextAppState === 'inactive');
+      const movedToForeground =
+        (prev === 'background' || prev === 'inactive') && nextAppState === 'active';
+
+      if (movedToBackground) {
+        startBackgroundFromLifecycle();
+      }
+
+      if (movedToForeground) {
+        refreshSettings();
+
+        if (isBackgroundTrackingRunning()) {
+          stopBackgroundGPSTracking()
+            .then(() => {
+              setIsBackgroundRunning(false);
+              setBackgroundMessage('Foreground active: background tracking stopped.');
+              addStatusUpdate('App in foreground: background tracking stopped.');
+            })
+            .catch(() => {
+              setBackgroundMessage('Could not stop background tracking.');
+            });
+        }
+      }
+    });
 
     return () => {
+      subscription.remove();
       clearLocationWatch();
     };
     // We intentionally run this once on mount.
@@ -184,13 +379,133 @@ export default function GPSLiveDataScreen() {
     Linking.openSettings();
   };
 
+  const onStartBackgroundPress = async () => {
+    if (!isBackgroundTrackingAvailable()) {
+      setBackgroundMessage(
+        'Background module missing. Run: npm i react-native-background-actions',
+      );
+      return;
+    }
+
+    const granted = await requestAndroidBackgroundLocationPermission();
+    if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+      setBackgroundMessage('Background location permission denied.');
+      addStatusUpdate('Background tracking not started (permission denied).');
+      return;
+    }
+
+    try {
+      await startBackgroundGPSTracking();
+      setIsBackgroundRunning(true);
+      setBackgroundMessage('Background tracking started.');
+      addStatusUpdate('Background tracking started.');
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to start background tracking.';
+      setBackgroundMessage(message);
+      addStatusUpdate(message);
+    }
+  };
+
+  const onStopBackgroundPress = async () => {
+    try {
+      await stopBackgroundGPSTracking();
+      setIsBackgroundRunning(false);
+      setBackgroundMessage('Background tracking stopped.');
+      addStatusUpdate('Background tracking stopped.');
+    } catch {
+      setBackgroundMessage('Failed to stop background tracking.');
+    }
+  };
+
+  const ensureAndroidBackgroundPermissions = async () => {
+    if (Platform.OS !== 'android') {
+      return true;
+    }
+
+    const hasFine = await PermissionsAndroid.check(
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+    );
+    if (!hasFine) {
+      return false;
+    }
+
+    const sdkVersion = Number(Platform.Version);
+    if (sdkVersion < 29) {
+      return true;
+    }
+
+    const hasBackground = await PermissionsAndroid.check(
+      PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION,
+    );
+    return hasBackground;
+  };
+
+  const startBackgroundFromLifecycle = async () => {
+    if (!isBackgroundTrackingAvailable()) {
+      return;
+    }
+
+    if (isBackgroundTrackingRunning()) {
+      setIsBackgroundRunning(true);
+      return;
+    }
+
+    const hasPermissions = await ensureAndroidBackgroundPermissions();
+    if (!hasPermissions) {
+      addStatusUpdate(
+        'Background tracking skipped: grant "Allow all the time" location.',
+      );
+      return;
+    }
+
+    try {
+      await startBackgroundGPSTracking();
+      setIsBackgroundRunning(true);
+      setBackgroundMessage('Background tracking started automatically.');
+      addStatusUpdate('App in background: tracking started.');
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to auto-start background.';
+      setBackgroundMessage(message);
+      addStatusUpdate(message);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={styles.title}>Live GPS Data</Text>
 
         {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
         {storageMessage ? <Text style={styles.storageInfo}>{storageMessage}</Text> : null}
+        {backgroundMessage ? (
+          <Text style={styles.backgroundInfo}>{backgroundMessage}</Text>
+        ) : null}
+
+        <View style={styles.statusCard}>
+          <Text style={styles.statusTitle}>GPS Status</Text>
+          <Text style={styles.statusStage}>Stage: {gpsStage}</Text>
+          <Text style={styles.statusMeta}>
+            Around: {gpsSettings.overpassAroundMeters}m | Min accuracy:{' '}
+            {gpsSettings.minAccuracyMeters}m
+          </Text>
+          <Text style={styles.statusMeta}>
+            Distance: {gpsSettings.distanceFilterMeters}m | MaxAge:{' '}
+            {gpsSettings.maxAgeMs}ms
+          </Text>
+          {statusUpdates.map((item, index) => (
+            <Text key={`${item.time}-${index}`} style={styles.statusLine}>
+              {new Date(item.time).toLocaleTimeString()} - {item.message}
+            </Text>
+          ))}
+        </View>
 
         <View style={styles.actions}>
           <Pressable
@@ -210,6 +525,25 @@ export default function GPSLiveDataScreen() {
               <Text style={styles.secondaryButtonText}>Open App Settings</Text>
             </Pressable>
           ) : null}
+        </View>
+
+        <View style={styles.actions}>
+          <Pressable
+            style={isBackgroundRunning ? styles.secondaryButton : styles.button}
+            onPress={isBackgroundRunning ? onStopBackgroundPress : onStartBackgroundPress}
+          >
+            <Text
+              style={
+                isBackgroundRunning
+                  ? styles.secondaryButtonText
+                  : styles.buttonText
+              }
+            >
+              {isBackgroundRunning
+                ? 'Stop Background Tracking'
+                : 'Start Background Tracking'}
+            </Text>
+          </Pressable>
         </View>
 
         <View style={styles.card}>
@@ -238,7 +572,7 @@ export default function GPSLiveDataScreen() {
             ? new Date(gpsData.timestamp).toLocaleTimeString()
             : 'Waiting for GPS...'}
         </Text>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -250,8 +584,11 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+  },
+  contentContainer: {
     padding: 16,
     gap: 12,
+    paddingBottom: 28,
   },
   title: {
     fontSize: 26,
@@ -291,6 +628,38 @@ const styles = StyleSheet.create({
     color: '#92400e',
     fontSize: 13,
     marginBottom: 4,
+  },
+  backgroundInfo: {
+    color: '#1d4ed8',
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  statusCard: {
+    backgroundColor: '#ecfeff',
+    borderRadius: 12,
+    borderColor: '#a5f3fc',
+    borderWidth: 1,
+    padding: 12,
+    gap: 4,
+  },
+  statusTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  statusStage: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#155e75',
+    marginBottom: 2,
+  },
+  statusMeta: {
+    fontSize: 12,
+    color: '#334155',
+  },
+  statusLine: {
+    fontSize: 12,
+    color: '#1f2937',
   },
   actions: {
     gap: 8,

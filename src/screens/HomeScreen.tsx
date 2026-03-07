@@ -63,7 +63,7 @@ export default function HomeScreen() {
       setIsBusy(true);
       await clearCachedGPSData();
       setCachedData([]);
-    } catch (_error) {
+    } catch {
       Alert.alert('Clear failed', 'Could not clear cached GPS data.');
     } finally {
       setIsBusy(false);
@@ -71,6 +71,13 @@ export default function HomeScreen() {
   };
 
   const renderItem = ({ item }: { item: GPSDataPoint }) => {
+    const tagsText =
+      item.roadInfo && Object.keys(item.roadInfo.tags).length > 0
+        ? Object.entries(item.roadInfo.tags)
+            .map(([key, value]) => `${key}:${value}`)
+            .join(', ')
+        : 'not fetched';
+
     return (
       <View style={styles.row}>
         <Text style={styles.time}>
@@ -84,13 +91,18 @@ export default function HomeScreen() {
         <Text style={styles.value}>
           Acc: {item.accuracy === null ? 'N/A' : `${item.accuracy.toFixed(2)} m`}
         </Text>
+        <Text style={styles.value}>
+          MaxSpeed: {item.roadInfo?.maxSpeed ?? 'not fetched'}
+        </Text>
+        <Text style={styles.value}>WayId: {item.roadInfo?.wayId ?? 'not fetched'}</Text>
+        <Text style={styles.value}>Tags: {tagsText}</Text>
       </View>
     );
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>GPS Cache (Every 5 sec)</Text>
+      <Text style={styles.title}>GPS + Road Cache (Every 5 sec)</Text>
       {storageMessage ? <Text style={styles.warning}>{storageMessage}</Text> : null}
       <Text style={styles.subtitle}>Cached points: {cachedData.length}</Text>
 
