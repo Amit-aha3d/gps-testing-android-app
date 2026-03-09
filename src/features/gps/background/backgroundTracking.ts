@@ -1,7 +1,10 @@
 import { appendGPSData } from '../storage/gpsCache';
+import { appendGPSAPITimelineEntry } from '../storage/gpsApiTimeline';
 import { saveGPSOverlayMetrics } from '../storage/gpsOverlayMetrics';
 import { getGPSQuerySettings } from '../storage/gpsSettings';
 import { fetchRoadInfoForLocation } from '../services/overpass';
+import { maybeAutoArchiveGPSCache } from '../reports/gpsAutoArchive';
+import { maybeAutoArchiveTimeline } from '../reports/gpsTimelineAutoArchive';
 import type { GPSDataPoint } from '../types/gps';
 
 type GPSError = { message: string };
@@ -118,15 +121,23 @@ export async function startBackgroundGPSTracking() {
         sample.accuracy !== null && sample.accuracy <= settings.minAccuracyMeters;
 
       let pointToCache: GPSDataPoint = sample;
+      let apiCalledTime: number | null = null;
+      let apiResponseTime: number | null = null;
+      let apiResponseText = '';
       if (shouldCallOverpass) {
         try {
-          const roadInfo = await fetchRoadInfoForLocation(
+          apiCalledTime = Date.now();
+          const { roadInfo, rawResponse } = await fetchRoadInfoForLocation(
             sample.latitude,
             sample.longitude,
             settings.overpassAroundMeters,
           );
+          apiResponseTime = Date.now();
+          apiResponseText = JSON.stringify(rawResponse);
           pointToCache = { ...sample, roadInfo };
         } catch {
+          apiResponseTime = Date.now();
+          apiResponseText = JSON.stringify({ error: 'Overpass request failed' });
           pointToCache = {
             ...sample,
             roadInfo: {
@@ -150,6 +161,12 @@ export async function startBackgroundGPSTracking() {
                 : `Skipped: accuracy ${sample.accuracy.toFixed(1)}m above threshold ${settings.minAccuracyMeters}m`,
           },
         };
+        apiResponseText = JSON.stringify({
+          info:
+            sample.accuracy === null
+              ? 'API not called because GPS accuracy is unavailable'
+              : `API not called because GPS accuracy ${sample.accuracy.toFixed(1)}m is above threshold ${settings.minAccuracyMeters}m`,
+        });
       }
 
       pointToCache = {
@@ -161,7 +178,22 @@ export async function startBackgroundGPSTracking() {
         accuracy: sample.accuracy,
         maxSpeed: pointToCache.roadInfo?.maxSpeed ?? 'not fetched',
       });
-      await appendGPSData(pointToCache);
+      const timelineCount = await appendGPSAPITimelineEntry({
+        gpsData: JSON.stringify({
+          latitude: sample.latitude,
+          longitude: sample.longitude,
+          altitude: sample.altitude,
+          accuracy: sample.accuracy,
+        }),
+        gpsDataTime: sample.timestamp,
+        querySettings: JSON.stringify(settings),
+        apiCalledTime,
+        apiResponseTime,
+        apiResponse: apiResponseText,
+      });
+      await maybeAutoArchiveTimeline(timelineCount);
+      const next = await appendGPSData(pointToCache);
+      await maybeAutoArchiveGPSCache(next.length);
     };
 
     watchId = geolocation.watchPosition(

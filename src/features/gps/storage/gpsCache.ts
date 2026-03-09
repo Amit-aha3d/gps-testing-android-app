@@ -1,18 +1,20 @@
 import type { GPSDataPoint } from '../types/gps';
 
 const GPS_CACHE_KEY = 'gps_cache_v1';
-const MAX_CACHE_ITEMS = 120;
+export const MAX_CACHE_ITEMS = 120;
 
 type AsyncStorageLike = {
   getItem: (key: string) => Promise<string | null>;
   setItem: (key: string, value: string) => Promise<void>;
 };
 
+let writeQueue: Promise<GPSDataPoint[]> = Promise.resolve([]);
+
 function getAsyncStorage(): AsyncStorageLike | null {
   try {
     const moduleRef = require('@react-native-async-storage/async-storage');
     return (moduleRef.default ?? moduleRef) as AsyncStorageLike;
-  } catch (_error) {
+  } catch {
     return null;
   }
 }
@@ -37,22 +39,27 @@ export async function getCachedGPSData(): Promise<GPSDataPoint[]> {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return parsed;
-  } catch (_error) {
+    return normalizeCache(parsed);
+  } catch {
     return [];
   }
 }
 
 export async function appendGPSData(point: GPSDataPoint): Promise<GPSDataPoint[]> {
-  const asyncStorage = getAsyncStorage();
-  if (!asyncStorage) {
-    return [];
-  }
+  const run = async () => {
+    const asyncStorage = getAsyncStorage();
+    if (!asyncStorage) {
+      return [];
+    }
 
-  const existing = await getCachedGPSData();
-  const next = [point, ...existing].slice(0, MAX_CACHE_ITEMS);
-  await asyncStorage.setItem(GPS_CACHE_KEY, JSON.stringify(next));
-  return next;
+    const existing = await getCachedGPSData();
+    const next = normalizeCache([point, ...existing]);
+    await asyncStorage.setItem(GPS_CACHE_KEY, JSON.stringify(next));
+    return next;
+  };
+
+  writeQueue = writeQueue.then(run, run);
+  return writeQueue;
 }
 
 export async function clearCachedGPSData(): Promise<void> {
@@ -62,4 +69,18 @@ export async function clearCachedGPSData(): Promise<void> {
   }
 
   await asyncStorage.setItem(GPS_CACHE_KEY, JSON.stringify([]));
+}
+
+function normalizeCache(points: GPSDataPoint[]): GPSDataPoint[] {
+  const dedupMap = new Map<string, GPSDataPoint>();
+  points.forEach(point => {
+    const key = `${point.timestamp}_${point.latitude}_${point.longitude}`;
+    if (!dedupMap.has(key)) {
+      dedupMap.set(key, point);
+    }
+  });
+
+  return [...dedupMap.values()]
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, MAX_CACHE_ITEMS);
 }

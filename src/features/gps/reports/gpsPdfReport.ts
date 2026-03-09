@@ -121,6 +121,13 @@ function buildHTML(points: GPSDataPoint[]) {
 }
 
 export async function generateGPSPdfReport(points: GPSDataPoint[]) {
+  return generateGPSPdfReportWithOptions(points, {});
+}
+
+export async function generateGPSPdfReportWithOptions(
+  points: GPSDataPoint[],
+  options: { directory?: string },
+) {
   const pdf = getPDFGenerator();
   if (!pdf) {
     throw new Error('PDF module missing. Run: npm i react-native-html-to-pdf');
@@ -131,7 +138,7 @@ export async function generateGPSPdfReport(points: GPSDataPoint[]) {
   const result = await pdf.generatePDF({
     html,
     fileName,
-    directory: 'Download',
+    directory: options.directory,
   });
 
   if (!result.filePath) {

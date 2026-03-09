@@ -5,12 +5,14 @@ import { PermissionsAndroid, Platform, StatusBar, Text } from 'react-native';
 
 import HomeScreen from './src/screens/HomeScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import APITimelineScreen from './src/screens/APITimelineScreen';
 import GPSLiveDataScreen from './src/features/gps/screens/GPSLiveDataScreen';
 import GlobalGPSWidget from './src/features/gps/components/GlobalGPSWidget';
 
 type RootTabParamList = {
   Home: undefined;
   GPS: undefined;
+  Timeline: undefined;
   Settings: undefined;
 };
 
@@ -72,6 +74,16 @@ export default function App() {
             title: 'GPS',
             tabBarIcon: ({ focused }) => (
               <Text style={tabIconStyle(focused)}>{'\u25C9'}</Text>
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Timeline"
+          component={APITimelineScreen}
+          options={{
+            title: 'Timeline',
+            tabBarIcon: ({ focused }) => (
+              <Text style={tabIconStyle(focused)}>{'\u2261'}</Text>
             ),
           }}
         />

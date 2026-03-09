@@ -12,6 +12,7 @@ type OverpassResponse = {
 };
 
 const OVERPASS_URL = 'https://overpass.kumi.systems/api/interpreter';
+// const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 
 function buildQuery(lat: number, lon: number, aroundMeters: number) {
   return `[out:json][timeout:25];
@@ -59,7 +60,7 @@ export async function fetchRoadInfoForLocation(
   latitude: number,
   longitude: number,
   aroundMeters: number,
-): Promise<GPSRoadInfo> {
+): Promise<{ roadInfo: GPSRoadInfo; rawResponse: unknown }> {
   const query = buildQuery(latitude, longitude, aroundMeters);
   const response = await fetch(OVERPASS_URL, {
     method: 'POST',
@@ -79,19 +80,25 @@ export async function fetchRoadInfoForLocation(
 
   if (!way) {
     return {
-      maxSpeed: 'not fetched',
-      tags: {},
-      wayId: null,
-      status: 'No nearby highway found',
+      roadInfo: {
+        maxSpeed: 'not fetched',
+        tags: {},
+        wayId: null,
+        status: 'No nearby highway found',
+      },
+      rawResponse: json,
     };
   }
 
   const tags = way.tags ?? {};
   const maxSpeed = tags.maxspeed ?? 'not fetched';
   return {
-    maxSpeed,
-    tags,
-    wayId: way.id ?? null,
-    status: tags.maxspeed ? 'Fetched' : 'MaxSpeed tag missing in response',
+    roadInfo: {
+      maxSpeed,
+      tags,
+      wayId: way.id ?? null,
+      status: tags.maxspeed ? 'Fetched' : 'MaxSpeed tag missing in response',
+    },
+    rawResponse: json,
   };
 }
