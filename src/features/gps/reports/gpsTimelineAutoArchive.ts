@@ -32,6 +32,7 @@ export async function maybeAutoArchiveTimeline(pointCountHint?: number): Promise
       pointCount: rows.length,
       reportType: 'timeline',
     });
+    // Clear only after both PDF generation and report indexing succeed.
     await clearGPSAPITimeline();
   } finally {
     isTimelineAutoArchiveRunning = false;

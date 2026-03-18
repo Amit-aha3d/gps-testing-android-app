@@ -2,7 +2,10 @@ import { appendGPSData } from '../storage/gpsCache';
 import { appendGPSAPITimelineEntry } from '../storage/gpsApiTimeline';
 import { saveGPSOverlayMetrics } from '../storage/gpsOverlayMetrics';
 import { getGPSQuerySettings } from '../storage/gpsSettings';
-import { fetchRoadInfoForLocation } from '../services/overpass';
+import {
+  fetchRoadInfoForLocation,
+  getOverpassFailureDetails,
+} from '../services/overpass';
 import { maybeAutoArchiveGPSCache } from '../reports/gpsAutoArchive';
 import { maybeAutoArchiveTimeline } from '../reports/gpsTimelineAutoArchive';
 import type { GPSDataPoint } from '../types/gps';
@@ -135,16 +138,20 @@ export async function startBackgroundGPSTracking() {
           apiResponseTime = Date.now();
           apiResponseText = JSON.stringify(rawResponse);
           pointToCache = { ...sample, roadInfo };
-        } catch {
+        } catch (error) {
+          const failure = getOverpassFailureDetails(error);
           apiResponseTime = Date.now();
-          apiResponseText = JSON.stringify({ error: 'Overpass request failed' });
+          apiResponseText = JSON.stringify({
+            errorCategory: failure.category,
+            errorReason: failure.reason,
+          });
           pointToCache = {
             ...sample,
             roadInfo: {
               maxSpeed: 'not fetched',
               tags: {},
               wayId: null,
-              status: 'Overpass request failed',
+              status: `Overpass failed (${failure.category}): ${failure.reason}`,
             },
           };
         }

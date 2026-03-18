@@ -28,6 +28,7 @@ export async function maybeAutoArchiveGPSCache(pointCountHint?: number): Promise
       pointCount: points.length,
       reportType: 'gps',
     });
+    // Clear only after both PDF generation and report indexing succeed.
     await clearCachedGPSData();
   } finally {
     isAutoArchiveRunning = false;

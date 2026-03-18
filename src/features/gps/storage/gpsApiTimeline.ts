@@ -10,7 +10,7 @@ export type GPSAPITimelineEntry = {
 
 const GPS_API_TIMELINE_KEY = 'gps_api_timeline_v1';
 const MAX_TIMELINE_ITEMS = 500;
-export const AUTO_TIMELINE_ARCHIVE_ITEMS = 120;
+export const AUTO_TIMELINE_ARCHIVE_ITEMS = 50;
 
 type AsyncStorageLike = {
   getItem: (key: string) => Promise<string | null>;

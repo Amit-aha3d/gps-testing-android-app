@@ -11,8 +11,15 @@ type OverpassResponse = {
   elements?: OverpassWayElement[];
 };
 
-const OVERPASS_URL = 'https://overpass.kumi.systems/api/interpreter';
-// const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+// const OVERPASS_URL = 'https://overpass.kumi.systems/api/interpreter';
+const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+const OVERPASS_TIMEOUT_MS = 12000;
+
+export type OverpassFailureDetails = {
+  category: 'timeout' | 'network' | 'http' | 'parse' | 'unknown';
+  reason: string;
+};
+
 
 function buildQuery(lat: number, lon: number, aroundMeters: number) {
   return `[out:json][timeout:25];
@@ -62,16 +69,33 @@ export async function fetchRoadInfoForLocation(
   aroundMeters: number,
 ): Promise<{ roadInfo: GPSRoadInfo; rawResponse: unknown }> {
   const query = buildQuery(latitude, longitude, aroundMeters);
-  const response = await fetch(OVERPASS_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'text/plain',
-    },
-    body: query,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, OVERPASS_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(OVERPASS_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain',
+      },
+      body: query,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.toLowerCase().includes('aborted')) {
+      throw new Error(`Overpass timeout after ${OVERPASS_TIMEOUT_MS} ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
-    throw new Error(`Overpass request failed (${response.status})`);
+    throw new Error(`Overpass HTTP ${response.status}: ${response.statusText}`);
   }
 
   const json = (await response.json()) as OverpassResponse;
@@ -101,4 +125,25 @@ export async function fetchRoadInfoForLocation(
     },
     rawResponse: json,
   };
+}
+
+export function getOverpassFailureDetails(error: unknown): OverpassFailureDetails {
+  const reason =
+    error instanceof Error ? error.message : 'Unknown error while calling Overpass';
+  const lower = reason.toLowerCase();
+
+  if (lower.includes('timeout')) {
+    return { category: 'timeout', reason };
+  }
+  if (lower.includes('network request failed') || lower.includes('failed to fetch')) {
+    return { category: 'network', reason };
+  }
+  if (lower.includes('http')) {
+    return { category: 'http', reason };
+  }
+  if (lower.includes('json') || lower.includes('parse')) {
+    return { category: 'parse', reason };
+  }
+
+  return { category: 'unknown', reason };
 }
