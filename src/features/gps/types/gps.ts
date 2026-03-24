@@ -6,6 +6,7 @@ export type GPSDataPoint = {
   timestamp: number;
   roadInfo?: GPSRoadInfo | null;
   querySettings?: GPSQuerySettings | null;
+  speedDecision?: GPSSpeedDecision | null;
 };
 
 export type GPSRoadInfo = {
@@ -20,4 +21,14 @@ export type GPSQuerySettings = {
   minAccuracyMeters: number;
   distanceFilterMeters: number;
   maxAgeMs: number;
+  fixedFallbackSpeedKmph: number;
+};
+
+export type GPSSpeedDecision = {
+  directSpeedKmph: number | null;
+  resolvedSpeedKmph: number;
+  edgeCase: string;
+  approach: string;
+  detail: string;
+  decidedAt: number;
 };

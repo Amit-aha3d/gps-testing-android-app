@@ -4,13 +4,19 @@ import { getGPSOverlayMetrics } from '../storage/gpsOverlayMetrics';
 
 type WidgetState = {
   accuracy: number | null;
-  maxSpeed: string;
+  directSpeedKmph: number | null;
+  resolvedSpeedKmph: number | null;
+  approach: string;
+  edgeCase: string;
 };
 
 export default function GlobalGPSWidget() {
   const [state, setState] = useState<WidgetState>({
     accuracy: null,
-    maxSpeed: 'not fetched',
+    directSpeedKmph: null,
+    resolvedSpeedKmph: null,
+    approach: 'not_started',
+    edgeCase: 'not_started',
   });
 
   useEffect(() => {
@@ -23,7 +29,10 @@ export default function GlobalGPSWidget() {
       }
       setState({
         accuracy: next.accuracy,
-        maxSpeed: next.maxSpeed,
+        directSpeedKmph: next.directSpeedKmph,
+        resolvedSpeedKmph: next.resolvedSpeedKmph,
+        approach: next.approach,
+        edgeCase: next.edgeCase,
       });
     };
 
@@ -37,12 +46,21 @@ export default function GlobalGPSWidget() {
 
   return (
     <View pointerEvents="none" style={styles.container}>
-      <Text style={styles.title}>Live GPS</Text>
-      <Text style={styles.row}>MaxSpeed: {state.maxSpeed}</Text>
+      <Text style={styles.title}>Live Speed</Text>
+      <Text style={styles.row}>
+        Direct:{' '}
+        {state.directSpeedKmph === null ? 'N/A' : `${state.directSpeedKmph} km/h`}
+      </Text>
+      <Text style={styles.row}>
+        Smart:{' '}
+        {state.resolvedSpeedKmph === null ? 'N/A' : `${state.resolvedSpeedKmph} km/h`}
+      </Text>
       <Text style={styles.row}>
         Accuracy:{' '}
         {state.accuracy === null ? 'N/A' : `${state.accuracy.toFixed(2)} m`}
       </Text>
+      <Text style={styles.row}>Mode: {state.approach}</Text>
+      <Text style={styles.row}>Edge: {state.edgeCase}</Text>
     </View>
   );
 }
@@ -60,7 +78,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     zIndex: 9999,
     elevation: 12,
-    minWidth: 150,
+    minWidth: 220,
   },
   title: {
     fontSize: 13,
@@ -74,4 +92,3 @@ const styles = StyleSheet.create({
     color: '#064e3b',
   },
 });
-

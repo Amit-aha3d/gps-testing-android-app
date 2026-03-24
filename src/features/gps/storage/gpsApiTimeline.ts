@@ -5,7 +5,11 @@ export type GPSAPITimelineEntry = {
   querySettings: string;
   apiCalledTime: number | null;
   apiResponseTime: number | null;
-  apiResponse: string;
+  directSpeedKmph: number | null;
+  resolvedSpeedKmph: number;
+  edgeCase: string;
+  approach: string;
+  decisionDetail: string;
 };
 
 const GPS_API_TIMELINE_KEY = 'gps_api_timeline_v1';
@@ -38,8 +42,27 @@ export async function getGPSAPITimeline(): Promise<GPSAPITimelineEntry[]> {
   }
 
   try {
-    const parsed = JSON.parse(raw) as GPSAPITimelineEntry[];
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(raw) as Array<Partial<GPSAPITimelineEntry> & {
+      apiResponse?: string;
+    }>;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.map(item => ({
+      id: item.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      gpsData: item.gpsData ?? '',
+      gpsDataTime: item.gpsDataTime ?? 0,
+      querySettings: item.querySettings ?? 'not available',
+      apiCalledTime: item.apiCalledTime ?? null,
+      apiResponseTime: item.apiResponseTime ?? null,
+      directSpeedKmph:
+        typeof item.directSpeedKmph === 'number' ? item.directSpeedKmph : null,
+      resolvedSpeedKmph:
+        typeof item.resolvedSpeedKmph === 'number' ? item.resolvedSpeedKmph : 0,
+      edgeCase: item.edgeCase ?? 'legacy_entry',
+      approach: item.approach ?? 'legacy_entry',
+      decisionDetail: item.decisionDetail ?? item.apiResponse ?? 'not available',
+    }));
   } catch {
     return [];
   }

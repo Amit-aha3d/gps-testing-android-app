@@ -1,6 +1,9 @@
 type GPSOverlayMetrics = {
   accuracy: number | null;
-  maxSpeed: string;
+  directSpeedKmph: number | null;
+  resolvedSpeedKmph: number | null;
+  approach: string;
+  edgeCase: string;
   updatedAt: number;
 };
 
@@ -13,7 +16,10 @@ type AsyncStorageLike = {
 
 const DEFAULT_METRICS: GPSOverlayMetrics = {
   accuracy: null,
-  maxSpeed: 'not fetched',
+  directSpeedKmph: null,
+  resolvedSpeedKmph: null,
+  approach: 'not_started',
+  edgeCase: 'not_started',
   updatedAt: 0,
 };
 
@@ -42,10 +48,22 @@ export async function getGPSOverlayMetrics(): Promise<GPSOverlayMetrics> {
     return {
       accuracy:
         typeof parsed.accuracy === 'number' ? parsed.accuracy : DEFAULT_METRICS.accuracy,
-      maxSpeed:
-        typeof parsed.maxSpeed === 'string' && parsed.maxSpeed.length > 0
-          ? parsed.maxSpeed
-          : DEFAULT_METRICS.maxSpeed,
+      directSpeedKmph:
+        typeof parsed.directSpeedKmph === 'number'
+          ? parsed.directSpeedKmph
+          : DEFAULT_METRICS.directSpeedKmph,
+      resolvedSpeedKmph:
+        typeof parsed.resolvedSpeedKmph === 'number'
+          ? parsed.resolvedSpeedKmph
+          : DEFAULT_METRICS.resolvedSpeedKmph,
+      approach:
+        typeof parsed.approach === 'string' && parsed.approach.length > 0
+          ? parsed.approach
+          : DEFAULT_METRICS.approach,
+      edgeCase:
+        typeof parsed.edgeCase === 'string' && parsed.edgeCase.length > 0
+          ? parsed.edgeCase
+          : DEFAULT_METRICS.edgeCase,
       updatedAt:
         typeof parsed.updatedAt === 'number' ? parsed.updatedAt : DEFAULT_METRICS.updatedAt,
     };
@@ -56,7 +74,10 @@ export async function getGPSOverlayMetrics(): Promise<GPSOverlayMetrics> {
 
 export async function saveGPSOverlayMetrics(input: {
   accuracy: number | null;
-  maxSpeed: string;
+  directSpeedKmph: number | null;
+  resolvedSpeedKmph: number | null;
+  approach: string;
+  edgeCase: string;
 }): Promise<void> {
   const asyncStorage = getAsyncStorage();
   if (!asyncStorage) {
@@ -65,9 +86,11 @@ export async function saveGPSOverlayMetrics(input: {
 
   const next: GPSOverlayMetrics = {
     accuracy: input.accuracy,
-    maxSpeed: input.maxSpeed || 'not fetched',
+    directSpeedKmph: input.directSpeedKmph,
+    resolvedSpeedKmph: input.resolvedSpeedKmph,
+    approach: input.approach,
+    edgeCase: input.edgeCase,
     updatedAt: Date.now(),
   };
   await asyncStorage.setItem(GPS_OVERLAY_METRICS_KEY, JSON.stringify(next));
 }
-

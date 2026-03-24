@@ -136,7 +136,11 @@ export default function APITimelineScreen() {
               <Text style={[styles.cell, styles.headerCell]}>Query Settings</Text>
               <Text style={[styles.cell, styles.headerCell]}>API Called Time</Text>
               <Text style={[styles.cell, styles.headerCell]}>API Response Time</Text>
-              <Text style={[styles.cellWide, styles.headerCell]}>Full API Response</Text>
+              <Text style={[styles.cell, styles.headerCell]}>Direct Speed</Text>
+              <Text style={[styles.cell, styles.headerCell]}>Smart Speed</Text>
+              <Text style={[styles.cell, styles.headerCell]}>Edge Case</Text>
+              <Text style={[styles.cell, styles.headerCell]}>Approach</Text>
+              <Text style={[styles.cellWide, styles.headerCell]}>Decision Detail</Text>
             </View>
 
             {rows.map(item => (
@@ -146,7 +150,13 @@ export default function APITimelineScreen() {
                 <Text style={styles.cell}>{item.querySettings ?? 'not available'}</Text>
                 <Text style={styles.cell}>{formatTime(item.apiCalledTime)}</Text>
                 <Text style={styles.cell}>{formatTime(item.apiResponseTime)}</Text>
-                <Text style={styles.cellWide}>{item.apiResponse}</Text>
+                <Text style={styles.cell}>
+                  {item.directSpeedKmph === null ? 'N/A' : `${item.directSpeedKmph} km/h`}
+                </Text>
+                <Text style={styles.cell}>{`${item.resolvedSpeedKmph} km/h`}</Text>
+                <Text style={styles.cell}>{item.edgeCase}</Text>
+                <Text style={styles.cell}>{item.approach}</Text>
+                <Text style={styles.cellWide}>{item.decisionDetail}</Text>
               </View>
             ))}
           </View>

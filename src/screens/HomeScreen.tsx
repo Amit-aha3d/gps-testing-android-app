@@ -129,7 +129,7 @@ export default function HomeScreen() {
         : 'not fetched';
 
     const settingsText = item.querySettings
-      ? `around:${item.querySettings.overpassAroundMeters}m, minAcc:${item.querySettings.minAccuracyMeters}m, distance:${item.querySettings.distanceFilterMeters}m, maxAge:${item.querySettings.maxAgeMs}ms`
+      ? `around:${item.querySettings.overpassAroundMeters}m, minAcc:${item.querySettings.minAccuracyMeters}m, distance:${item.querySettings.distanceFilterMeters}m, maxAge:${item.querySettings.maxAgeMs}ms, fixedFallback:${item.querySettings.fixedFallbackSpeedKmph}km/h`
       : 'not saved';
 
     return (

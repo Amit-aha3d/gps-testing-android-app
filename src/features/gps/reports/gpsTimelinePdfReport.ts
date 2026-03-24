@@ -50,7 +50,13 @@ function buildHTML(rows: GPSAPITimelineEntry[]) {
           <td>${esc(item.querySettings ?? 'not available')}</td>
           <td>${esc(formatDateTime(item.apiCalledTime))}</td>
           <td>${esc(formatDateTime(item.apiResponseTime))}</td>
-          <td>${esc(item.apiResponse)}</td>
+          <td>${esc(
+            item.directSpeedKmph === null ? 'N/A' : `${item.directSpeedKmph} km/h`,
+          )}</td>
+          <td>${esc(`${item.resolvedSpeedKmph} km/h`)}</td>
+          <td>${esc(item.edgeCase)}</td>
+          <td>${esc(item.approach)}</td>
+          <td>${esc(item.decisionDetail)}</td>
         </tr>
       `;
     })
@@ -83,7 +89,11 @@ function buildHTML(rows: GPSAPITimelineEntry[]) {
               <th>Query Settings</th>
               <th>API Called Time</th>
               <th>API Response Time</th>
-              <th>Full API Response</th>
+              <th>Direct Speed</th>
+              <th>Smart Speed</th>
+              <th>Edge Case</th>
+              <th>Approach</th>
+              <th>Decision Detail</th>
             </tr>
           </thead>
           <tbody>

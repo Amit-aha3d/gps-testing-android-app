@@ -20,6 +20,7 @@ type FormState = {
   minAccuracyMeters: string;
   distanceFilterMeters: string;
   maxAgeMs: string;
+  fixedFallbackSpeedKmph: string;
 };
 
 function toFormState(values = DEFAULT_GPS_QUERY_SETTINGS): FormState {
@@ -28,6 +29,7 @@ function toFormState(values = DEFAULT_GPS_QUERY_SETTINGS): FormState {
     minAccuracyMeters: String(values.minAccuracyMeters),
     distanceFilterMeters: String(values.distanceFilterMeters),
     maxAgeMs: String(values.maxAgeMs),
+    fixedFallbackSpeedKmph: String(values.fixedFallbackSpeedKmph),
   };
 }
 
@@ -82,12 +84,20 @@ export default function SettingsScreen() {
         'Distance filter',
       );
       const maxAgeMs = parsePositiveInt(form.maxAgeMs, 'Max age');
+      const fixedFallbackSpeedKmph = parsePositiveInt(
+        form.fixedFallbackSpeedKmph,
+        'Fixed fallback speed',
+      );
+      if (fixedFallbackSpeedKmph < 1) {
+        throw new Error('Fixed fallback speed must be at least 1 km/h.');
+      }
 
       const saved = await saveGPSQuerySettings({
         overpassAroundMeters,
         minAccuracyMeters,
         distanceFilterMeters,
         maxAgeMs,
+        fixedFallbackSpeedKmph,
       });
       setForm(toFormState(saved));
       Alert.alert('Saved', 'GPS and Overpass settings updated.');
@@ -160,6 +170,15 @@ export default function SettingsScreen() {
             keyboardType="numeric"
             onChangeText={text => onChange('maxAgeMs', text)}
             placeholder="1000"
+          />
+
+          <Text style={styles.label}>Fixed fallback speed (km/h)</Text>
+          <TextInput
+            style={styles.input}
+            value={form.fixedFallbackSpeedKmph}
+            keyboardType="numeric"
+            onChangeText={text => onChange('fixedFallbackSpeedKmph', text)}
+            placeholder="30"
           />
         </View>
 

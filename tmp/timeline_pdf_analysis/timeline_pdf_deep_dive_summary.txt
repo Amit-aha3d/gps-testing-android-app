@@ -1,0 +1,57 @@
+Timeline PDF Deep-Dive Summary
+
+Source files: 15 timeline PDFs
+Total parsed entries: 1344
+Success entries: 388
+Failed entries: 956
+Success rate: 28.9%
+Failure rate: 71.1%
+
+Fallback / Edge Case Counts
+- backend_failure: 943
+- unknown_wrapped: 289
+- speed_limit_flap_guard: 62
+- old_gps_data: 13
+- hold_last_good: 12
+- confirmed_osm_change: 10
+- maxspeed_missing: 9
+- fresh_osm: 4
+- normal: 2
+
+Error Counts
+- http_429_rate_limited: 431
+- http_504_gateway_timeout: 89
+- maxspeed_missing: 9
+- network_error: 3
+
+Per-file Entry Counts
+- gps-api-timeline-17738295294753505781367744286963.pdf: 91
+- gps-api-timeline-17738296937527946413788682294365.pdf: 91
+- gps-api-timeline-17738298711688671502411600546194.pdf: 91
+- gps-api-timeline-17738300210301312087364356041112.pdf: 91
+- gps-api-timeline-17738301808485373535253304506694.pdf: 91
+- gps-api-timeline-17738303422312646705129678461665.pdf: 91
+- gps-api-timeline-17738305107948036326732506197792.pdf: 91
+- gps-api-timeline-17738306759142655377423486609789.pdf: 91
+- gps-api-timeline-17738308157694980629329873943096.pdf: 91
+- gps-api-timeline-17738309739707552029144678943398.pdf: 91
+- gps-api-timeline-17738311173134866231833898274960.pdf: 91
+- gps-api-timeline-17738312878226047405418837775894.pdf: 91
+- gps-api-timeline-17738314570228575677724043147716.pdf: 70
+- gps-api-timeline-17738316391528047505584831343994.pdf: 91
+- gps-api-timeline-17738319068415561496973396326772.pdf: 91
+
+Observations
+- Backend/API issues dominate the dataset. HTTP 429 is the single biggest concrete error bucket.
+- HTTP 504 is the second major API problem, indicating overloaded or slow Overpass responses.
+- MaxSpeed missing exists, but it is far smaller than rate limiting and timeout issues.
+- Speed-limit flap guard is active and appears multiple times, so the confirmation logic is being exercised.
+- Old GPS data exists, but it is not the dominant cause of fallback in this dataset.
+- Some rows are classified as unknown_wrapped because PDF table wrapping splits edge-case text across lines and columns.
+
+Recommended Actions
+- Keep multi-endpoint rotation for 429 handling.
+- Add a 429 cooldown per endpoint instead of trying the same endpoint again immediately on the next cycle.
+- Separate GPS cache cadence from API query cadence so Overpass is not called every cache cycle.
+- Add inferred speed defaults for roads where OSM has no maxspeed tag.
+- Improve timeline export formatting so edge case and approach values do not wrap into ambiguous fragments.

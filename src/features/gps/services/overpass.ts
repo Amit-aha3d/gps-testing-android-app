@@ -11,20 +11,33 @@ type OverpassResponse = {
   elements?: OverpassWayElement[];
 };
 
-// const OVERPASS_URL = 'https://overpass.kumi.systems/api/interpreter';
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+const OVERPASS_URLS = [
+  'https://lz4.overpass-api.de/api/interpreter',
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+] as const;
 const OVERPASS_TIMEOUT_MS = 12000;
+let nextOverpassUrlIndex = 0;
 
 export type OverpassFailureDetails = {
   category: 'timeout' | 'network' | 'http' | 'parse' | 'unknown';
   reason: string;
 };
 
-
 function buildQuery(lat: number, lon: number, aroundMeters: number) {
   return `[out:json][timeout:25];
 way(around:${aroundMeters},${lat},${lon})["highway"];
 out body tags geom;`;
+}
+
+function getRotatedOverpassUrls() {
+  return OVERPASS_URLS.map(
+    (_, offset) => OVERPASS_URLS[(nextOverpassUrlIndex + offset) % OVERPASS_URLS.length],
+  );
+}
+
+function advanceOverpassUrlIndex() {
+  nextOverpassUrlIndex = (nextOverpassUrlIndex + 1) % OVERPASS_URLS.length;
 }
 
 function sqDistance(aLat: number, aLon: number, bLat: number, bLon: number) {
@@ -63,20 +76,14 @@ function pickClosestWay(
   return best;
 }
 
-export async function fetchRoadInfoForLocation(
-  latitude: number,
-  longitude: number,
-  aroundMeters: number,
-): Promise<{ roadInfo: GPSRoadInfo; rawResponse: unknown }> {
-  const query = buildQuery(latitude, longitude, aroundMeters);
+async function postOverpassQuery(url: string, query: string): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
     controller.abort();
   }, OVERPASS_TIMEOUT_MS);
 
-  let response: Response;
   try {
-    response = await fetch(OVERPASS_URL, {
+    return await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'text/plain',
@@ -87,15 +94,49 @@ export async function fetchRoadInfoForLocation(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (message.toLowerCase().includes('aborted')) {
-      throw new Error(`Overpass timeout after ${OVERPASS_TIMEOUT_MS} ms`);
+      throw new Error(`Overpass timeout after ${OVERPASS_TIMEOUT_MS} ms at ${url}`);
     }
     throw error;
   } finally {
     clearTimeout(timeoutId);
   }
+}
 
-  if (!response.ok) {
-    throw new Error(`Overpass HTTP ${response.status}: ${response.statusText}`);
+export async function fetchRoadInfoForLocation(
+  latitude: number,
+  longitude: number,
+  aroundMeters: number,
+): Promise<{ roadInfo: GPSRoadInfo; rawResponse: unknown }> {
+  const query = buildQuery(latitude, longitude, aroundMeters);
+  const urlsToTry = getRotatedOverpassUrls();
+  let lastError: Error | null = null;
+  let response: Response | null = null;
+  let responseUrl: string | null = null;
+
+  for (const url of urlsToTry) {
+    try {
+      const candidateResponse = await postOverpassQuery(url, query);
+      if (candidateResponse.status === 429) {
+        advanceOverpassUrlIndex();
+        lastError = new Error(`Overpass HTTP 429 at ${url}: ${candidateResponse.statusText}`);
+        continue;
+      }
+      if (!candidateResponse.ok) {
+        throw new Error(`Overpass HTTP ${candidateResponse.status} at ${url}: ${candidateResponse.statusText}`);
+      }
+
+      response = candidateResponse;
+      responseUrl = url;
+      nextOverpassUrlIndex = OVERPASS_URLS.indexOf(url);
+      break;
+    } catch (error) {
+      lastError =
+        error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  if (!response) {
+    throw lastError ?? new Error('All Overpass endpoints failed');
   }
 
   const json = (await response.json()) as OverpassResponse;
@@ -108,7 +149,9 @@ export async function fetchRoadInfoForLocation(
         maxSpeed: 'not fetched',
         tags: {},
         wayId: null,
-        status: 'No nearby highway found',
+        status: responseUrl
+          ? `No nearby highway found (${responseUrl})`
+          : 'No nearby highway found',
       },
       rawResponse: json,
     };
@@ -121,7 +164,13 @@ export async function fetchRoadInfoForLocation(
       maxSpeed,
       tags,
       wayId: way.id ?? null,
-      status: tags.maxspeed ? 'Fetched' : 'MaxSpeed tag missing in response',
+      status: tags.maxspeed
+        ? responseUrl
+          ? `Fetched (${responseUrl})`
+          : 'Fetched'
+        : responseUrl
+          ? `MaxSpeed tag missing in response (${responseUrl})`
+          : 'MaxSpeed tag missing in response',
     },
     rawResponse: json,
   };

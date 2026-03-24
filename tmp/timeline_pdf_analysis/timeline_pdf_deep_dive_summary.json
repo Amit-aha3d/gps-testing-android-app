@@ -1,0 +1,48 @@
+{
+  "source_files": 15,
+  "total_entries": 1344,
+  "success_entries": 388,
+  "failed_entries": 956,
+  "success_rate": 28.87,
+  "failure_rate": 71.13,
+  "fallback_counts": {
+    "old_gps_data": 13,
+    "speed_limit_flap_guard": 62,
+    "backend_failure": 943,
+    "unknown_wrapped": 289,
+    "confirmed_osm_change": 10,
+    "hold_last_good": 12,
+    "fresh_osm": 4,
+    "maxspeed_missing": 9,
+    "normal": 2
+  },
+  "error_counts": {
+    "http_504_gateway_timeout": 89,
+    "http_429_rate_limited": 431,
+    "network_error": 3,
+    "maxspeed_missing": 9
+  },
+  "file_entry_counts": {
+    "gps-api-timeline-17738295294753505781367744286963.pdf": 91,
+    "gps-api-timeline-17738296937527946413788682294365.pdf": 91,
+    "gps-api-timeline-17738298711688671502411600546194.pdf": 91,
+    "gps-api-timeline-17738300210301312087364356041112.pdf": 91,
+    "gps-api-timeline-17738301808485373535253304506694.pdf": 91,
+    "gps-api-timeline-17738303422312646705129678461665.pdf": 91,
+    "gps-api-timeline-17738305107948036326732506197792.pdf": 91,
+    "gps-api-timeline-17738306759142655377423486609789.pdf": 91,
+    "gps-api-timeline-17738308157694980629329873943096.pdf": 91,
+    "gps-api-timeline-17738309739707552029144678943398.pdf": 91,
+    "gps-api-timeline-17738311173134866231833898274960.pdf": 91,
+    "gps-api-timeline-17738312878226047405418837775894.pdf": 91,
+    "gps-api-timeline-17738314570228575677724043147716.pdf": 70,
+    "gps-api-timeline-17738316391528047505584831343994.pdf": 91,
+    "gps-api-timeline-17738319068415561496973396326772.pdf": 91
+  },
+  "latency_seconds_summary": {
+    "count": 0,
+    "avg": null,
+    "min": null,
+    "max": null
+  }
+}

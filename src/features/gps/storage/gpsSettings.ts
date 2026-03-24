@@ -12,6 +12,7 @@ export const DEFAULT_GPS_QUERY_SETTINGS: GPSQuerySettings = {
   minAccuracyMeters: 30,
   distanceFilterMeters: 1,
   maxAgeMs: 1000,
+  fixedFallbackSpeedKmph: 30,
 };
 
 function getAsyncStorage(): AsyncStorageLike | null {
@@ -28,6 +29,7 @@ function sanitizeSettings(input: Partial<GPSQuerySettings>): GPSQuerySettings {
   const minAccuracy = Number(input.minAccuracyMeters);
   const distance = Number(input.distanceFilterMeters);
   const maxAge = Number(input.maxAgeMs);
+  const fixedFallbackSpeed = Number(input.fixedFallbackSpeedKmph);
 
   return {
     overpassAroundMeters:
@@ -46,6 +48,10 @@ function sanitizeSettings(input: Partial<GPSQuerySettings>): GPSQuerySettings {
       Number.isFinite(maxAge) && maxAge >= 0
         ? Math.round(maxAge)
         : DEFAULT_GPS_QUERY_SETTINGS.maxAgeMs,
+    fixedFallbackSpeedKmph:
+      Number.isFinite(fixedFallbackSpeed) && fixedFallbackSpeed > 0
+        ? Math.round(fixedFallbackSpeed)
+        : DEFAULT_GPS_QUERY_SETTINGS.fixedFallbackSpeedKmph,
   };
 }
 
@@ -80,4 +86,3 @@ export async function saveGPSQuerySettings(
   await asyncStorage.setItem(GPS_SETTINGS_KEY, JSON.stringify(sanitized));
   return sanitized;
 }
-
